@@ -141,62 +141,85 @@ func (c *Control) Stat() (IocopyStat) {
 	return *c.st
 }
 
-func optTime(name string, opts []interface{}) (dur time.Duration, tm *time.Time) {
-	get := func (o interface{}) bool {
-
-		switch o.(type) {
-		case string:
-			str := o.(string)
-			var f float64
-			fmt.Sscanf(str, "%f", &f)
-			if f != 0 {
-				dur = time.Duration(float64(time.Second)*f)
-				return true
-			}
-		case float64:
-			dur = time.Duration(float64(time.Second)*o.(float64))
-			return true
-		case int:
-			dur = time.Duration(int64(time.Second)*int64(o.(int)))
-			return true			
-		case int64:
-			dur = time.Duration(int64(time.Second)*o.(int64))
-			return true
-		case time.Duration:
-			dur = o.(time.Duration)
-			return true
-		case time.Time:
-			_tm := o.(time.Time)
-			tm = &_tm
-			return true
-		}
-		return false
+func (c *Control) MaxSpeed(s int64) {
+	if s == 0 {
+		c.w.hasmaxspeed = false
+	} else {
+		c.w.hasmaxspeed = true
+		c.w.maxspeed = s
 	}
-	for i, o := range opts {
-		switch o.(type) {
-		case string:
-			stro := o.(string)
-			if !strings.HasPrefix(stro, name) {
-				continue
-			}
-			var val interface{}
-			if len(stro) == len(name) {
-				if i+1 < len(opts) {
-					val = opts[i+1]
-				}
-			} else {
-				val = stro[len(name):]
-			}
-			if get(val) {
-				return
-			}
+}
+
+func toFloat(o interface{}) (can bool, f float64) {
+	switch o.(type) {
+	case string:
+		str := o.(string)
+		n, _ := fmt.Sscanf(str, "%f", &f)
+		if n == 1 {
+			can = true
 		}
+	case float64:
+		f = o.(float64)
+		can = true
+	case int:
+		f = float64(o.(int))
+		can = true			
+	case int64:
+		f = float64(o.(int64))
+		can = true
 	}
 	return
 }
 
+func optGet(name string, opts []interface{}) (got bool, val interface{}) {
+	for i, o := range opts {
+		switch o.(type) {
+		case string:
+			stro := o.(string)
+			if strings.HasPrefix(stro, name) {
+				if len(stro) == len(name) {
+					if i+1 < len(opts) {
+						val = opts[i+1]
+					}
+				} else {
+					val = stro[len(name):]
+				}
+				got = true
+				return
+			}
+		}
+	}
+	return	
+}
+
+func optDuration(name string, opts []interface{}) (got bool, dur time.Duration) {
+	var val interface{}
+	var f float64
+	if got, val = optGet(name, opts); !got { return }
+	if dur, got = val.(time.Duration); !got { return }
+	if got, f = toFloat(val); !got { return }
+	dur = time.Duration(float64(time.Second)*f)
+	return
+}
+
+func optTime(name string, opts []interface{}) (got bool, tm time.Time) {
+	var val interface{}
+	got, val = optGet(name, opts)
+	tm, got = val.(time.Time)
+	return
+}
+
+func optInt64(name string, opts []interface{}) (got bool, i int64) {
+	var val interface{}
+	var f float64
+	got, val = optGet(name, opts)
+	if got, f = toFloat(val); !got { return }
+	i = int64(f)
+	return
+}
+
 func dbp(opts ...interface{}) {
-	if true {
+	if false {
 		log.Println(opts...)
 	}
 }
@@ -214,17 +237,15 @@ func (st *IocopyStat) update() {
 }
 
 func (st *IocopyStat) finish() {
-	dur := int64(time.Since(st.Begin)/time.Second)
-	if dur > 0 {
-		st.Speed = st.Size / dur
-	}
+	dur := float64(time.Since(st.Begin))/float64(time.Second)
+	st.Speed = int64(float64(st.Size) / dur)
 	st.Per = 1.0
 	st.update()
 }
 
 func IoCopy(
 	r io.ReadCloser,
-	length int64, 
+	length int64,
 	w io.Writer,
 	opts ...interface{},
 ) (err error) {
@@ -245,20 +266,32 @@ func IoCopy(
 		}
 	}
 
-	rto, _ := optTime("readtimeout=", opts)
-	if rto == time.Duration(0) {
-		rto, _ = optTime("timeout=", opts)
-	}
-	deaddur, deadtm := optTime("deadline=", opts)
-	if deadtm == nil && deaddur != time.Duration(0) {
-		_tm := time.Now().Add(deaddur)
-		deadtm = &_tm
+	var rto time.Duration
+	var hasrto bool
+	hasrto, rto = optDuration("readtimeout=", opts)
+	if !hasrto {
+		hasrto, rto = optDuration("timeout=", opts)
 	}
 
-	intv, _ := optTime("cbinterval=", opts)
-	if intv == time.Duration(0) {
+	var deadtm time.Time
+	var deaddur time.Duration
+	var hasdeadtm bool
+	var hasdeaddur bool
+	hasdeadtm, deadtm = optTime("deadline=", opts)
+	if !hasdeadtm {
+		hasdeaddur, deaddur = optDuration("deadline=", opts)
+	}
+	if hasdeaddur {
+		hasdeadtm = true
+		deadtm = time.Now().Add(deaddur)
+	}
+
+	hasintv, intv := optDuration("cbinterval=", opts)
+	if !hasintv {
 		intv = time.Second
 	}
+
+	myw.hasmaxspeed, myw.maxspeed = optInt64("maxspeed=", opts)
 
 	if st == nil {
 		st = &IocopyStat{}
@@ -272,7 +305,22 @@ func IoCopy(
 
 	done := make(chan int, 0)
 	go func () {
-		_, err = io.Copy(myw, r)
+		N := int64(16*1024)
+		if myw.hasmaxspeed {
+			N = myw.maxspeed
+		}
+		for {
+			_, err = io.CopyN(myw, r, N)
+			if err != nil {
+				break
+			}
+		}
+		if err == io.EOF {
+			err = nil
+		}
+		if myw.hasmaxspeed {
+			time.Sleep(myw.tm.Sub(time.Now()))
+		}
 		done <- 1
 	}()
 
@@ -281,6 +329,8 @@ func IoCopy(
 	var n, idle int64
 
 	for {
+		myw.tm = time.Now().Add(intv)
+		myw.curn = 0
 		select {
 		case <-done:
 			st.Size = myw.n
@@ -304,11 +354,11 @@ func IoCopy(
 			} else {
 				idle++
 			}
-			if rto != time.Duration(0) && time.Duration(idle)*intv > rto {
+			if hasrto && time.Duration(idle)*intv > rto {
 				err = errors.New("read timeout")
 				return 
 			}
-			if deadtm != nil && time.Now().After(*deadtm) {
+			if hasdeadtm && time.Now().After(deadtm) {
 				err = errors.New("deadline reached")
 				return
 			}
@@ -321,11 +371,20 @@ func IoCopy(
 type myWriter struct {
 	io.Writer
 	n int64
+	hasmaxspeed bool
+	maxspeed int64
+	tm time.Time
+	curn int64
 }
 
 func (m *myWriter) Write(b []byte) (n int, err error) {
 	n, err = m.Writer.Write(b)
 	m.n += int64(n)
+	m.curn += int64(n)
+	//fmt.Println(m.curn, m.maxspeed)
+	if m.hasmaxspeed && m.curn >= m.maxspeed {
+		time.Sleep(m.tm.Sub(time.Now()))
+	}
 	return
 }
 
@@ -347,9 +406,9 @@ func Dial(url string, opts ...interface{}) (
 		}
 	}
 
-	dto, _ := optTime("dialtimeout=", opts)
-	if dto == time.Duration(0) {
-		dto, _ = optTime("timeout=", opts)
+	hasdto, dto := optDuration("dialtimeout=", opts)
+	if !hasdto {
+		hasdto, dto = optDuration("timeout=", opts)
 	}
 
 	if header == nil {
@@ -364,7 +423,7 @@ func Dial(url string, opts ...interface{}) (
 
 	tr := &http.Transport{
 		Dial: func(network, addr string) (net.Conn, error) {
-			if dto != time.Duration(0) {
+			if hasdto {
 				return net.DialTimeout(network, addr, dto)
 			} else {
 				return net.Dial(network, addr)
@@ -385,32 +444,32 @@ func Dial(url string, opts ...interface{}) (
 	return
 }
 
-func CurlString(url string, opts ...interface{}) (err error, body string) {
+func String(url string, opts ...interface{}) (err error, body string) {
 	var b bytes.Buffer
-	err = CurlWrite(url, &b, opts...)
+	err = Write(url, &b, opts...)
 	body = string(b.Bytes())
 	return
 }
 
-func CurlBytes(url string, opts ...interface{}) (err error, body []byte) {
+func Bytes(url string, opts ...interface{}) (err error, body []byte) {
 	var b bytes.Buffer
-	err = CurlWrite(url, &b, opts...)
+	err = Write(url, &b, opts...)
 	body = b.Bytes()
 	return
 }
 
-func CurlFile(url string, path string, opts ...interface{}) (err error) {
+func File(url string, path string, opts ...interface{}) (err error) {
 	var w io.WriteCloser
 	w, err = os.Create(path)
 	if err != nil {
 		return
 	}
 	defer w.Close()
-	err = CurlWrite(url, w, opts...)
+	err = Write(url, w, opts...)
 	return
 }
 
-func CurlWrite(url string, w io.Writer, opts ...interface{}) (err error) {
+func Write(url string, w io.Writer, opts ...interface{}) (err error) {
 	var r io.ReadCloser
 	var length int64
 	err, r, length = Dial(url, opts...)
