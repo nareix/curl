@@ -11,52 +11,56 @@ Curl library for golang
 
     import "github.com/go-av/curl"
     
-  	err, str := curl.CurlString("http://www.baidu.com")
-  	err, b := curl.CurlBytes("http://www.baidu.com")
+  	err, str := curl.String("http://www.baidu.com")
+  	err, b := curl.Bytes("http://www.baidu.com")
   	
 ### Save to file or writer
 
-    err := curl.CurlFile("www.baidu.com", "/tmp/index.html")
+    err := curl.File("www.baidu.com", "/tmp/index.html")
   
   	var w io.Writer
-  	err := curl.CurlWrite("http://www.baidu.com", w)
+  	err := curl.Write("http://www.baidu.com", w)
   
 ### With timeout (both dial timeout and read timeout set)
 
-  	curl.CurlString("http://www.baidu.com", "timeout=10")
-  	curl.CurlString("http://www.baidu.com", "timeout=", 10)
-  	curl.CurlString("http://www.baidu.com", "timeout=", time.Second*10)
+  	curl.String("http://www.baidu.com", "timeout=10")
+  	curl.String("http://www.baidu.com", "timeout=", 10)
+  	curl.String("http://www.baidu.com", "timeout=", time.Second*10)
   
 ### With different dial timeout and read timeout
 
-    curl.CurlString("http://www.baidu.com", "dialtimeout=10", "readtimeout=20")
-  	curl.CurlString("http://www.baidu.com", "dialtimeout=", 10, "readtimeout=", time.Second*20)
+    curl.String("http://www.baidu.com", "dialtimeout=10", "readtimeout=20")
+  	curl.String("http://www.baidu.com", "dialtimeout=", 10, "readtimeout=", time.Second*20)
   
 ### With deadline (if cannot download in 10s then die)
 
-    curl.CurlFile("http://www.baidu.com", "index.html", "deadline=", time.Now().Add(time.Second*10))
-  	curl.CurlFile("http://www.baidu.com", "index.html", "deadline=10")
-  	curl.CurlFile("http://www.baidu.com", "index.html", "deadline=", 10.0)
-  	curl.CurlFile("http://www.baidu.com", "index.html", "deadline=", time.Second*10)
+    curl.File("http://www.baidu.com", "index.html", "deadline=", time.Now().Add(time.Second*10))
+  	curl.File("http://www.baidu.com", "index.html", "deadline=10")
+  	curl.File("http://www.baidu.com", "index.html", "deadline=", 10.0)
+  	curl.File("http://www.baidu.com", "index.html", "deadline=", time.Second*10)
+  
+### With speed limit 
+
+    curl.File("http://www.baidu.com", "index.html", "maxspeed=", 30*1024)
   
 ### With custom http header
 
     header := http.Header {
   		"User-Agent" : {"curl/7.29.0"},
   	}
-  	curl.CurlFile("http://www.baidu.com", "file", header)
+  	curl.File("http://www.baidu.com", "file", header)
   
 ### These params can be use in any function and in any order
 
-    curl.CurlFile("http://www.baidu.com", "index.html", "timeout=", 10, header)
-  	curl.CurlString("http://www.baidu.com", index.html", timeout=", 10)
+    curl.File("http://www.baidu.com", "index.html", "timeout=", 10, header)
+  	curl.String("http://www.baidu.com", index.html", timeout=", 10)
 
 ## Advanced Usage
 
 ### Get detail info
 
     var st curl.IocopyStat
-    curl.CurlFile(
+    curl.File(
       "http://tk.wangyuehd.com/soft/skycn/WinRAR.exe_2.exe", 
     	"a.exe",
     	&st)
@@ -68,7 +72,7 @@ outputs
     
 ### Monitor progress
 
-    curl.CurlFile(
+    curl.File(
   		"http://tk.wangyuehd.com/soft/skycn/WinRAR.exe_2.exe",
   		"a.exe",
   		func (st curl.IocopyStat) error {
@@ -100,16 +104,20 @@ outputs
 
 ### Set monitor callback interval
 
-  	curl.CurlFile("xxxx", "xxx", cb, "cbinterval=", 0.5) // 0.5 second
+  	curl.File("xxxx", "xxx", cb, "cbinterval=", 0.5) // 0.5 second
 
 ### Curl in goroutine
 
   	con := &curl.Control{}
-  	go curl.CurlFile("xxx", "xxx", con)
+  	go curl.File("xxx", "xxx", con)
   	// and then get stat
   	st := con.Stat() 
   	// or stop
   	con.Stop()
+    // set max speed
+    con.MaxSpeed(1024*10)
+    // cancel max speed
+    con.MaxSpeed(0)
   
 ### Just dial
 
