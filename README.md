@@ -4,6 +4,7 @@ Curl library for golang
 * WITHOUT libcurl.so just using "net/http"
 * Monitoring progress
 * Timeouts and deadline
+* Speed limit
 
 ## Simple Usage
 
