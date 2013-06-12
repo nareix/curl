@@ -10,23 +10,24 @@ import (
 		//"http://youku.com",
 		//"http://dldir1.qq.com/qqfile/qq/QQ2013/2013Beta3/6565/QQ2013Beta3.exe",
 
-func test1() {
+func test1(opts ...interface{}) {
   var st curl.IocopyStat
   curl.File(
-  	"http://tk.wangyuehd.com/soft/skycn/WinRAR.exe_2.exe", 
-  	"a.exe",
-  	&st)
+		"http://tk.wangyuehd.com/soft/skycn/WinRAR.exe_2.exe", 
+		"a.exe",
+		append(opts, &st)...)
   fmt.Println("size=", st.Size, "average speed=", st.Speed)
 }
 
-func test2() {
+func test2(opts ...interface{}) {
 	curl.File(
 		"http://tk.wangyuehd.com/soft/skycn/WinRAR.exe_2.exe",
 		"a.exe",
+		append(opts,
 		func (st curl.IocopyStat) error {
 			fmt.Println(st.Perstr, st.Sizestr, st.Lengthstr, st.Speedstr, st.Durstr)
 			return nil
-		},
+		})...,
 	)
 }
 
@@ -43,5 +44,5 @@ func test3() {
 }
 
 func main() {
-	test3()
+	test2("timeout=10")
 }

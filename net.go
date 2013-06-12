@@ -196,7 +196,7 @@ func optDuration(name string, opts []interface{}) (got bool, dur time.Duration) 
 	var val interface{}
 	var f float64
 	if got, val = optGet(name, opts); !got { return }
-	if dur, got = val.(time.Duration); !got { return }
+	if dur, got = val.(time.Duration); got { return }
 	if got, f = toFloat(val); !got { return }
 	dur = time.Duration(float64(time.Second)*f)
 	return
@@ -354,6 +354,7 @@ func IoCopy(
 			} else {
 				idle++
 			}
+			log.Println("rto", hasrto, idle)
 			if hasrto && time.Duration(idle)*intv > rto {
 				err = errors.New("read timeout")
 				return 
