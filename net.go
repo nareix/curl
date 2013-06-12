@@ -354,7 +354,6 @@ func IoCopy(
 			} else {
 				idle++
 			}
-			log.Println("rto", hasrto, idle)
 			if hasrto && time.Duration(idle)*intv > rto {
 				err = errors.New("read timeout")
 				return 
