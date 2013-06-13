@@ -25,9 +25,9 @@ func test2(opts ...interface{}) {
 		"a.exe",
 		append(opts,
 		func (st curl.IocopyStat) error {
-			fmt.Println(st.Perstr, st.Sizestr, st.Lengthstr, st.Speedstr, st.Durstr)
+			fmt.Println(st.Stat, st.Perstr, st.Sizestr, st.Lengthstr, st.Speedstr, st.Durstr)
 			return nil
-		})...,
+		}, "timeout=10")...,
 	)
 }
 

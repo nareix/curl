@@ -106,6 +106,7 @@ import (
 )
 
 type IocopyStat struct {
+	Stat string					// dial,download
 	Done bool 					// download is done
 	Begin time.Time 		// download begin time
 	Dur time.Duration 	// download elapsed time
@@ -225,6 +226,7 @@ func dbp(opts ...interface{}) {
 }
 
 func (st *IocopyStat) update() {
+	st.Stat = "downloading"
 	if st.Length > 0 {
 		st.Per = float64(st.Size)/float64(st.Length)
 	}
@@ -241,6 +243,15 @@ func (st *IocopyStat) finish() {
 	st.Speed = int64(float64(st.Size) / dur)
 	st.Per = 1.0
 	st.update()
+}
+
+func optIntv(opts ...interface{}) (intv time.Duration) {
+	var hasintv bool
+	hasintv, intv = optDuration("cbinterval=", opts)
+	if !hasintv {
+		intv = time.Second
+	}
+	return
 }
 
 func IoCopy(
@@ -286,10 +297,7 @@ func IoCopy(
 		deadtm = time.Now().Add(deaddur)
 	}
 
-	hasintv, intv := optDuration("cbinterval=", opts)
-	if !hasintv {
-		intv = time.Second
-	}
+	intv := optIntv(opts)
 
 	myw.hasmaxspeed, myw.maxspeed = optInt64("maxspeed=", opts)
 
@@ -392,7 +400,8 @@ func Dial(url string, opts ...interface{}) (
 	err error, r io.ReadCloser, length int64,
 ) {
 	var req *http.Request
-	
+	var cb IocopyCb
+
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
@@ -403,6 +412,8 @@ func Dial(url string, opts ...interface{}) (
 		switch o.(type) {
 		case http.Header:
 			header = o.(http.Header)
+		case func(IocopyStat)error:
+			cb = o.(func(IocopyStat)error)
 		}
 	}
 
@@ -410,6 +421,8 @@ func Dial(url string, opts ...interface{}) (
 	if !hasdto {
 		hasdto, dto = optDuration("timeout=", opts)
 	}
+
+	intv := optIntv(opts)
 
 	if header == nil {
 		header = http.Header {
@@ -421,20 +434,45 @@ func Dial(url string, opts ...interface{}) (
 
 	var resp *http.Response
 
-	tr := &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
-			if hasdto {
-				return net.DialTimeout(network, addr, dto)
-			} else {
-				return net.Dial(network, addr)
-			}
+	tr := &http.Transport {
+		Dial: func(network, addr string) (c net.Conn, e error) {
+			c, e = net.Dial(network, addr)
+			return
 		},
 	}
 	client := &http.Client{
 		Transport: tr,
 	}
 
-	resp, err = client.Do(req)
+	callcb := func (st IocopyStat) bool {
+		if cb != nil {
+			err = cb(st)
+		}
+		return err != nil
+	}
+
+	done := make(chan int, 0)
+	go func() {
+		resp, err = client.Do(req)
+		done <- 1
+	}()
+
+	tmstart := time.Now()
+
+	if callcb(IocopyStat{Stat:"connecting"}) { return }
+	for {
+		select {
+		case <-done:
+			break
+		case <-time.After(intv):
+			if callcb(IocopyStat{Stat:"connecting"}) { return }
+			if hasdto && time.Since(tmstart) > dto {
+				err = errors.New("dial timeout")
+				return
+			}
+		}
+	}
+
 	if err != nil {
 		return
 	}
