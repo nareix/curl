@@ -427,7 +427,7 @@ func Dial(url string, opts ...interface{}) (
 	if header == nil {
 		header = http.Header {
 			"Accept" : {"*/*"},
-			"User-Agent" : {"curl/7.29.0"},
+			"User-Agent" : {"curl/7.21.6 (i686-pc-linux-gnu) libcurl/7.21.6 OpenSSL/1.0.0e zlib/1.2.3.4 libidn/1.22"},
 		}
 	}
 	req.Header = header
@@ -435,8 +435,13 @@ func Dial(url string, opts ...interface{}) (
 	var resp *http.Response
 
 	tr := &http.Transport {
+		//DisableCompression: true,
 		Dial: func(network, addr string) (c net.Conn, e error) {
-			c, e = net.Dial(network, addr)
+			if hasdto {
+				c, e = net.DialTimeout(network, addr, dto)
+			} else {
+				c, e = net.Dial(network, addr)
+			}
 			return
 		},
 	}
@@ -451,7 +456,7 @@ func Dial(url string, opts ...interface{}) (
 		return err != nil
 	}
 
-	done := make(chan int, 0)
+	done := make(chan int, 1)
 	go func() {
 		resp, err = client.Do(req)
 		done <- 1
@@ -460,10 +465,10 @@ func Dial(url string, opts ...interface{}) (
 	tmstart := time.Now()
 
 	if callcb(IocopyStat{Stat:"connecting"}) { return }
-	for {
+	out: for {
 		select {
 		case <-done:
-			break
+			break out
 		case <-time.After(intv):
 			if callcb(IocopyStat{Stat:"connecting"}) { return }
 			if hasdto && time.Since(tmstart) > dto {
