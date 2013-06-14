@@ -44,6 +44,8 @@ func test3() {
 }
 
 func main() {
-	test2("http://v.youku.com/v_show/id_XNTcwMTk0MjUy.html")
+	test2(
+		"http://tk.wangyuehd.com/soft/skycn/WinRAR.exe_2.exe",
+		"maxspeed=", 1000)
 }
 

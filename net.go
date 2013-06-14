@@ -123,8 +123,11 @@ type IocopyStat struct {
 
 type Control struct {
 	stop bool
+	maxSpeed int64
 	st *IocopyStat
-	w *myWriter
+	readTimeout time.Duration
+	dialTimeout time.Duration
+	deadline time.Time
 }
 
 type IocopyCb func (st IocopyStat) error
@@ -143,12 +146,7 @@ func (c *Control) Stat() (IocopyStat) {
 }
 
 func (c *Control) MaxSpeed(s int64) {
-	if s == 0 {
-		c.w.hasmaxspeed = false
-	} else {
-		c.w.hasmaxspeed = true
-		c.w.maxspeed = s
-	}
+	c.maxSpeed = s
 }
 
 func toFloat(o interface{}) (can bool, f float64) {
@@ -164,7 +162,7 @@ func toFloat(o interface{}) (can bool, f float64) {
 		can = true
 	case int:
 		f = float64(o.(int))
-		can = true			
+		can = true
 	case int64:
 		f = float64(o.(int64))
 		can = true
@@ -190,7 +188,7 @@ func optGet(name string, opts []interface{}) (got bool, val interface{}) {
 			}
 		}
 	}
-	return	
+	return
 }
 
 func optDuration(name string, opts []interface{}) (got bool, dur time.Duration) {
@@ -254,6 +252,17 @@ func optIntv(opts ...interface{}) (intv time.Duration) {
 	return
 }
 
+type mywriter struct {
+	io.Writer
+	n int64
+}
+
+func (m *mywriter) Write(p []byte) (n int, err error) {
+	n, err = m.Writer.Write(p)
+	m.n += int64(n)
+	return
+}
+
 func IoCopy(
 	r io.ReadCloser,
 	length int64,
@@ -264,8 +273,6 @@ func IoCopy(
 	var cb IocopyCb
 	var ct *Control
 
-	myw := &myWriter{Writer:w}
-
 	for _, o := range opts {
 		switch o.(type) {
 		case *IocopyStat:
@@ -275,6 +282,14 @@ func IoCopy(
 		case func(IocopyStat)error:
 			cb = o.(func(IocopyStat)error)
 		}
+	}
+
+	myw := &mywriter{w, 0}
+	if st == nil {
+		st = &IocopyStat{}
+	}
+	if ct == nil {
+		ct = &Control{st:st}
 	}
 
 	var rto time.Duration
@@ -299,35 +314,31 @@ func IoCopy(
 
 	intv := optIntv(opts)
 
-	myw.hasmaxspeed, myw.maxspeed = optInt64("maxspeed=", opts)
-
-	if st == nil {
-		st = &IocopyStat{}
-	}
-	if ct == nil {
-		ct = &Control{w:myw, st:st}
-	}
+	_, ct.maxSpeed = optInt64("maxspeed=", opts)
 
 	st.Begin = time.Now()
 	st.Length = length
 
 	done := make(chan int, 0)
 	go func () {
-		N := int64(16*1024)
-		if myw.hasmaxspeed {
-			N = myw.maxspeed
-		}
-		for {
-			_, err = io.CopyN(myw, r, N)
-			if err != nil {
-				break
+		if ct.maxSpeed == 0 {
+			_, err = io.Copy(myw, r)
+		} else {
+			tm := time.Now()
+			for {
+				_, err = io.CopyN(myw, r, ct.maxSpeed)
+				dur := time.Since(tm)
+				if dur < time.Second {
+					time.Sleep(time.Second - dur)
+				}
+				tm = time.Now()
+				if err != nil {
+					break
+				}
 			}
 		}
 		if err == io.EOF {
 			err = nil
-		}
-		if myw.hasmaxspeed {
-			time.Sleep(myw.tm.Sub(time.Now()))
 		}
 		done <- 1
 	}()
@@ -337,14 +348,12 @@ func IoCopy(
 	var n, idle int64
 
 	for {
-		myw.tm = time.Now().Add(intv)
-		myw.curn = 0
 		select {
 		case <-done:
 			st.Size = myw.n
 			st.Speed = myw.n - n
 			st.finish()
-			if cb != nil { err = cb(ct.Stat()) 	}
+			if cb != nil { err = cb(ct.Stat())	}
 			if err != nil { return }
 			return
 		case <-time.After(intv):
@@ -354,7 +363,7 @@ func IoCopy(
 			}
 			st.Size = myw.n
 			st.Speed = myw.n - n
-			if cb != nil { err = cb(ct.Stat()) 	}
+			if cb != nil { err = cb(ct.Stat())	}
 			if err != nil { return }
 			if myw.n != n {
 				n = myw.n
@@ -364,7 +373,7 @@ func IoCopy(
 			}
 			if hasrto && time.Duration(idle)*intv > rto {
 				err = errors.New("read timeout")
-				return 
+				return
 			}
 			if hasdeadtm && time.Now().After(deadtm) {
 				err = errors.New("deadline reached")
@@ -373,26 +382,6 @@ func IoCopy(
 		}
 	}
 
-	return
-}
-
-type myWriter struct {
-	io.Writer
-	n int64
-	hasmaxspeed bool
-	maxspeed int64
-	tm time.Time
-	curn int64
-}
-
-func (m *myWriter) Write(b []byte) (n int, err error) {
-	n, err = m.Writer.Write(b)
-	m.n += int64(n)
-	m.curn += int64(n)
-	//fmt.Println(m.curn, m.maxspeed)
-	if m.hasmaxspeed && m.curn >= m.maxspeed {
-		time.Sleep(m.tm.Sub(time.Now()))
-	}
 	return
 }
 
@@ -462,17 +451,13 @@ func Dial(url string, opts ...interface{}) (
 		done <- 1
 	}()
 
-	tmstart := time.Now()
-
 	if callcb(IocopyStat{Stat:"connecting"}) { return }
 	out: for {
 		select {
 		case <-done:
 			break out
 		case <-time.After(intv):
-			if callcb(IocopyStat{Stat:"connecting"}) { return }
-			if hasdto && time.Since(tmstart) > dto {
-				err = errors.New("dial timeout")
+			if callcb(IocopyStat{Stat:"connecting"}) {
 				return
 			}
 		}
