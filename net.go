@@ -255,11 +255,18 @@ func optIntv(opts ...interface{}) (intv time.Duration) {
 type mywriter struct {
 	io.Writer
 	n int64
+	curn int64
+	maxn int64
+	maxtm time.Time
 }
 
 func (m *mywriter) Write(p []byte) (n int, err error) {
 	n, err = m.Writer.Write(p)
 	m.n += int64(n)
+	m.curn += int64(n)
+	if m.maxn != 0 && m.curn > m.maxn {
+		time.Sleep(m.maxtm.Sub(time.Now()))
+	}
 	return
 }
 
@@ -284,7 +291,7 @@ func IoCopy(
 		}
 	}
 
-	myw := &mywriter{w, 0}
+	myw := &mywriter{Writer:w}
 	if st == nil {
 		st = &IocopyStat{}
 	}
@@ -326,13 +333,14 @@ func IoCopy(
 		} else {
 			tm := time.Now()
 			for {
-				_, err = io.CopyN(myw, r, ct.maxSpeed)
+				var nn int64
+				nn, err = io.CopyN(myw, r, ct.maxSpeed)
 				dur := time.Since(tm)
 				if dur < time.Second {
 					time.Sleep(time.Second - dur)
 				}
 				tm = time.Now()
-				if err != nil {
+				if nn != ct.maxSpeed || err != nil {
 					break
 				}
 			}
@@ -347,7 +355,10 @@ func IoCopy(
 
 	var n, idle int64
 
+	myw.maxn = ct.maxSpeed * int64(intv) / int64(time.Second)
 	for {
+		myw.maxtm = time.Now().Add(intv)
+		myw.curn = 0
 		select {
 		case <-done:
 			st.Size = myw.n
