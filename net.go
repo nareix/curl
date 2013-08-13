@@ -603,17 +603,42 @@ func PrettyPer(f float64) string {
 	return fmt.Sprintf("%.1f%%", f*100)
 }
 
-func PrettySize(size int64) string {
+func prettySize(_size interface{}, mul float64, tag []string) (ret string) {
+	var size float64
+	switch _size.(type) {
+	case int64:
+		size = float64(_size.(int64))
+	case int:
+		size = float64(_size.(int))
+	case float64:
+		size = _size.(float64)
+	default:
+		return
+	}
+	size *= mul
 	if size < 1024 {
-		return fmt.Sprintf("%dB", size)
+		return fmt.Sprintf("%d%s", size, tag[0])
 	}
 	if size < 1024*1024 {
-		return fmt.Sprintf("%.1fK", float64(size)/1024)
+		return fmt.Sprintf("%.1fKbits", size/1024)
 	}
 	if size < 1024*1024*1024 {
-		return fmt.Sprintf("%.1fM", float64(size)/1024/1024)
+		return fmt.Sprintf("%.1fMbits", size/1024/1024)
 	}
-	return fmt.Sprintf("%.1fG", float64(size)/1024/1024/1024)
+	return fmt.Sprintf("%.1fGbits", size/1024/1024/1024)
+
+}
+
+func PrettySize2(size interface{}) string {
+	return prettySize(size, 8, []string{
+		"Bits", "KBits", "MBits", "GBits",
+	})
+}
+
+func PrettySize(size interface{}) string {
+	return prettySize(size, 1, []string{
+		"B", "K", "M", "G",
+	})
 }
 
 func PrettySpeed(s int64) string {
