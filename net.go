@@ -509,7 +509,6 @@ func Dial(url string, opts ...interface{}) (
 	req.Header = header
 
 	var resp *http.Response
-	var conn net.Conn
 
 	tr := &http.Transport{
 		//DisableCompression: true,
@@ -519,7 +518,6 @@ func Dial(url string, opts ...interface{}) (
 			} else {
 				c, e = net.Dial(network, addr)
 			}
-			conn = c
 			return
 		},
 	}
