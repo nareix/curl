@@ -310,7 +310,7 @@ func (st *IocopyStat) finish() {
 	st.update()
 }
 
-func optIntv(opts ...interface{}) (intv time.Duration) {
+func optIntv(opts []interface{}) (intv time.Duration) {
 	var hasintv bool
 	hasintv, intv = optDuration("cbinterval=", opts)
 	if !hasintv {
