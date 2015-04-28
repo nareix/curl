@@ -473,7 +473,7 @@ func IoCopy(
 }
 
 func Dial(url string, opts ...interface{}) (
-	err error, r io.ReadCloser, length int64,
+	err error, r io.ReadCloser, length int64, s int,
 ) {
 	var req *http.Request
 	var cb IocopyCb
@@ -567,6 +567,7 @@ out:
 	}
 
 	r = resp.Body
+	s = resp.StatusCode
 	length = resp.ContentLength
 	return
 }
@@ -599,9 +600,14 @@ func File(url string, path string, opts ...interface{}) (err error) {
 func Write(url string, w io.Writer, opts ...interface{}) (err error) {
 	var r io.ReadCloser
 	var length int64
-	err, r, length = Dial(url, opts...)
+	var s int
+	err, r, length, s = Dial(url, opts...)
 	if err != nil {
 		return
+	}
+	if s == 404 {
+		fmt.Println("Returned 404")
+		os.Exit(1)
 	}
 	err = IoCopy(r, length, w, opts...)
 	return
