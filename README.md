@@ -1,8 +1,13 @@
+
 CURL-like library for golang (NOT libcurl binding)
 
 * Custom HTTP method and header
 * Monitoring download progress and speed
 * Pause/resume control
+
+### Status
+
+[![Travis Build Status](https://travis-ci.org/parnurzeal/gorequest.svg?branch=master)](https://travis-ci.org/parnurzeal/gorequest)
 
 ### Usage
 
