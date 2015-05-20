@@ -7,7 +7,7 @@ CURL-like library for golang (NOT libcurl binding)
 
 ### Status
 
-[![Travis Build Status](https://travis-ci.org/parnurzeal/gorequest.svg?branch=master)](https://travis-ci.org/parnurzeal/gorequest)
+[![Travis Build Status](https://travis-ci.org/nareix/curl.svg?branch=master)](https://travis-ci.org/nareix/curl)
 
 ### Usage
 
