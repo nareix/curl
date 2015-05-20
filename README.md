@@ -1,7 +1,7 @@
 CURL-like library for golang (NOT libcurl binding)
 
 * Custom HTTP method and header
-* Monitoring download/upload progress and speed
+* Monitoring download progress and speed
 * Pause/resume control
 
 ### Usage
@@ -51,6 +51,7 @@ req.Progress(func (p curl.ProgressStatus) {
 
 res, err := req.Do()
 
+res.HttpResponse                             // related *http.Response struct
 log.Println(res.Body)                        // Body in string
 log.Println(res.StatusCode)                  // HTTP Status Code: 200,404,302 etc
 log.Println(res.Hearders)                    // Reponse headers
