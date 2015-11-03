@@ -312,7 +312,9 @@ func (req *Request) MonitorUpload() (mon *Monitor) {
 }
 
 func (req *Request) enterStat(stat int) {
-	req.progressCb(ProgressStatus{Stat: stat})
+	if req.progressCb != nil {
+		req.progressCb(ProgressStatus{Stat: stat})
+	}
 
 	progressCall := func(stat int, mon *Monitor) {
 		var shot snapShot
@@ -330,7 +332,9 @@ func (req *Request) enterStat(stat int) {
 						shot = mon.currentProgressSnapshot()
 					}
 					ps.Stat = stat
-					req.progressCb(ps)
+					if req.progressCb != nil {
+						req.progressCb(ps)
+					}
 
 				case <-req.progressCloseEvent:
 					return
