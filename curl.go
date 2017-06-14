@@ -2,6 +2,7 @@ package curl
 
 import (
 	"bytes"
+	"errors"
 	_ "errors"
 	"fmt"
 	"io"
@@ -51,14 +52,17 @@ type Request struct {
 
 	dialTimeout     time.Duration
 	transferTimeout time.Duration
+
+	redirect bool
 }
 
-func New(url string) *Request {
+func New(url string, redirect bool) *Request {
 	req := &Request{
 		url: url,
 		Headers: http.Header{
 			"User-Agent": {"curl/7.29.0"},
 		},
+		redirect: redirect,
 	}
 
 	req.uploadMonitor = &Monitor{ioTracker: &ioTracker{}}
@@ -68,11 +72,11 @@ func New(url string) *Request {
 }
 
 func Get(url string) *Request {
-	return New(url).Method("GET")
+	return New(url, true).Method("GET")
 }
 
 func Post(url string) *Request {
-	return New(url).Method("POST")
+	return New(url, true).Method("POST")
 }
 
 func (req *Request) Method(method string) *Request {
@@ -472,6 +476,15 @@ func (req *Request) Do() (res Response, err error) {
 
 	httpclient := http.Client{
 		Transport: httptrans,
+	}
+
+	if !req.redirect {
+		httpclient = http.Client{
+			Transport: httptrans,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return errors.New("no redirect")
+			},
+		}
 	}
 
 	if httpres, err = httpclient.Do(httpreq); err != nil {
