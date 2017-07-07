@@ -488,6 +488,11 @@ func (req *Request) Do() (res Response, err error) {
 	}
 
 	if httpres, err = httpclient.Do(httpreq); err != nil {
+		if strings.Contains(err.Error() , "no redirect") {
+			res.StatusCode = httpres.StatusCode
+			res.Headers = httpres.Header
+			res.HttpResponse = httpres
+		}
 		return
 	}
 	defer httpres.Body.Close()
@@ -497,9 +502,15 @@ func (req *Request) Do() (res Response, err error) {
 
 	if req.downloadToFile != "" {
 		var f *os.File
-		if f, err = os.Create(req.downloadToFile); err != nil {
+		//if f, err = os.Create(req.downloadToFile); err != nil {
+		//	return
+		//}
+		if f, err = os.OpenFile(req.downloadToFile, os.O_SYNC|os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666); err != nil {
 			return
 		}
+		defer func() {
+			f.Close()
+		}()
 		resbody = f
 	} else {
 		resbodyBuffer = &bytes.Buffer{}
