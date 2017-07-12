@@ -543,6 +543,10 @@ func (req *Request) Do() (res Response, err error) {
 	return
 }
 
+func (req *Request) GetFilepath() string {
+	return req.downloadToFile
+}
+
 type Response struct {
 	HttpResponse   *http.Response
 	StatusCode     int
