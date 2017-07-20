@@ -505,7 +505,7 @@ func (req *Request) Do() (res Response, err error) {
 		//if f, err = os.Create(req.downloadToFile); err != nil {
 		//	return
 		//}
-		if f, err = os.OpenFile(req.downloadToFile, os.O_SYNC|os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666); err != nil {
+		if f, err = os.OpenFile(req.downloadToFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666); err != nil {
 			return
 		}
 		defer func() {
