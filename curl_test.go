@@ -8,6 +8,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
+
 	c := New("http://opvbhjo1o.bkt.clouddn.com/2017/6/13/video_2017_06_13.mp4", true)
 	c.SaveToFile("test.mp4")
 	c.Progress(func(p ProgressStatus) {
@@ -32,6 +33,14 @@ func TestNew(t *testing.T) {
 			"paused", p.Paused,
 		)
 	}, time.Second)
+
+	go func() {
+		time.Sleep(time.Second * 10)
+		fmt.Println("强行关闭")
+		err := c.ForceClose()
+		fmt.Println(err)
+	}()
+
 	res, err := c.Do()
 	if err != nil {
 		fmt.Println(err)

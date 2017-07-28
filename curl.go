@@ -53,6 +53,9 @@ type Request struct {
 	dialTimeout     time.Duration
 	transferTimeout time.Duration
 
+	transport *http.Transport
+	httpreq       *http.Request
+
 	redirect bool
 }
 
@@ -407,8 +410,17 @@ func (req *Request) ControlDownload() (ctrl *Control) {
 	return
 }
 
+func (req *Request) ForceClose() error {
+	if req.transport != nil {
+		req.transport.CancelRequest(req.httpreq)
+		return nil
+	} else {
+		return fmt.Errorf("transport not exist")
+	}
+}
+
 func (req *Request) Do() (res Response, err error) {
-	var httpreq *http.Request
+	//var httpreq *http.Request
 	var httpres *http.Response
 	var reqbody io.Reader
 	var reqbodyLength int64
@@ -450,13 +462,13 @@ func (req *Request) Do() (res Response, err error) {
 
 	defer req.enterStat(Closed)
 
-	if httpreq, err = http.NewRequest(req.method, req.url, reqbody); err != nil {
+	if req.httpreq, err = http.NewRequest(req.method, req.url, reqbody); err != nil {
 		return
 	}
-	httpreq.Header = req.Headers
-	httpreq.ContentLength = reqbodyLength
+	req.httpreq.Header = req.Headers
+	req.httpreq.ContentLength = reqbodyLength
 
-	httptrans := &http.Transport{
+	req.transport = &http.Transport{
 		Dial: func(network, addr string) (conn net.Conn, err error) {
 			if req.dialTimeout != time.Duration(0) {
 				conn, err = net.DialTimeout(network, addr, req.dialTimeout)
@@ -475,20 +487,20 @@ func (req *Request) Do() (res Response, err error) {
 	}
 
 	httpclient := http.Client{
-		Transport: httptrans,
+		Transport: req.transport,
 	}
 
 	if !req.redirect {
 		httpclient = http.Client{
-			Transport: httptrans,
+			Transport: req.transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return errors.New("no redirect")
 			},
 		}
 	}
 
-	if httpres, err = httpclient.Do(httpreq); err != nil {
-		if strings.Contains(err.Error() , "no redirect") {
+	if httpres, err = httpclient.Do(req.httpreq); err != nil {
+		if strings.Contains(err.Error(), "no redirect") {
 			res.StatusCode = httpres.StatusCode
 			res.Headers = httpres.Header
 			res.HttpResponse = httpres
