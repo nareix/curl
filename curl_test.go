@@ -9,7 +9,7 @@ import (
 
 func TestNew(t *testing.T) {
 
-	c := New("http://opvbhjo1o.bkt.clouddn.com/2017/6/13/video_2017_06_13.mp4", true)
+	c := New("http://127.0.0.1:9071/block", true)
 	c.SaveToFile("test.mp4")
 	c.Progress(func(p ProgressStatus) {
 		timeNeed := time.Duration(-1)
@@ -36,7 +36,13 @@ func TestNew(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Second * 10)
-		fmt.Println("强行关闭")
+		fmt.Println("强行软关闭")
+		c.ControlDownload().Stop()
+	}()
+
+	go func() {
+		time.Sleep(time.Second * 20)
+		fmt.Println("强行硬关闭")
 		err := c.ForceClose()
 		fmt.Println(err)
 	}()
