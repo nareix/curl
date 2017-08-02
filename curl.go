@@ -412,9 +412,11 @@ func (req *Request) ControlDownload() (ctrl *Control) {
 
 func (req *Request) ForceClose() error {
 	if req.transport != nil {
+		fmt.Println("transport 不存在取消失败")
 		req.transport.CancelRequest(req.httpreq)
 		return nil
 	} else {
+		fmt.Println("强制取消")
 		return fmt.Errorf("transport not exist")
 	}
 }
