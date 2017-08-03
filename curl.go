@@ -411,6 +411,8 @@ func (req *Request) ControlDownload() (ctrl *Control) {
 }
 
 func (req *Request) ForceClose() error {
+	fmt.Println("软取消")
+	req.ControlDownload().Stop()
 	if req.transport != nil {
 		fmt.Println("强制取消")
 		req.transport.CancelRequest(req.httpreq)
