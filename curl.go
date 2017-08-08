@@ -279,11 +279,11 @@ func (mon *Monitor) getProgressStatus(lastSnapshot *snapShot) (stat ProgressStat
 	stat.ContentLength = mon.contentLength
 	stat.Size = mon.ioTracker.Bytes
 
-	if lastSnapshot != nil && int64(now.Sub(lastSnapshot.time)) > 0 {
+	if lastSnapshot != nil && (int64(now.Sub(lastSnapshot.time)) / int64(time.Millisecond)) > 0 {
 		stat.Speed = (stat.Size - lastSnapshot.bytes) * 1000 / (int64(now.Sub(lastSnapshot.time)) / int64(time.Millisecond))
 	}
 
-	if int64(now.Sub(mon.timeStarted)) > 0 {
+	if (int64(now.Sub(mon.timeStarted)) / int64(time.Millisecond)) > 0 {
 		stat.AverageSpeed = stat.Size * 1000 / (int64(now.Sub(mon.timeStarted)) / int64(time.Millisecond))
 	}
 
