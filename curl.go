@@ -415,10 +415,12 @@ func (req *Request) ControlDownload() (ctrl *Control) {
 func (req *Request) ForceClose() error {
 	req.ControlDownload().Stop()
 	if req.transport != nil {
+		fmt.Println("hard close")
 		req.transport.CancelRequest(req.httpreq)
 		req.transport.CloseIdleConnections()
 		return nil
 	} else {
+		fmt.Println("transpart not exist, hard close failed")
 		return fmt.Errorf("transport not exist")
 	}
 }
