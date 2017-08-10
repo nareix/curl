@@ -420,7 +420,9 @@ func (req *Request) ForceClose() error {
 	if req.transport != nil {
 		fmt.Println("hard close")
 		req.transport.CancelRequest(req.httpreq)
+		fmt.Println("finish cancel request")
 		req.transport.CloseIdleConnections()
+		fmt.Println("finish close connection")
 		return nil
 	} else {
 		fmt.Println("transpart not exist, hard close failed")
