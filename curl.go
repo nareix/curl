@@ -418,7 +418,7 @@ func (req *Request) ForceClose() error {
 	}()
 	req.ControlDownload().Stop()
 	if req.transport != nil {
-		fmt.Println("hard close")
+		fmt.Println("hard close", req.url)
 		req.transport.CancelRequest(req.httpreq)
 		fmt.Println("finish cancel request")
 		req.transport.CloseIdleConnections()
