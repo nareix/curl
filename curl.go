@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"log"
 )
 
 /*
@@ -506,6 +507,14 @@ func (req *Request) Do() (res Response, err error) {
 			Transport: req.transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return errors.New("no redirect")
+			},
+		}
+	}else {
+		httpclient = http.Client{
+			Transport: req.transport,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				log.Println("Location:", req.URL, "[following]")
+				return nil
 			},
 		}
 	}
