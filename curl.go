@@ -414,7 +414,7 @@ func (req *Request) ControlDownload() (ctrl *Control) {
 
 func (req *Request) ForceClose() error {
 	defer func() {
-		fmt.Println("exit force close")
+		fmt.Println("exit force close", req.url)
 	}()
 	req.ControlDownload().Stop()
 	if req.transport != nil {
