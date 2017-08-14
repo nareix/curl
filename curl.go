@@ -2,10 +2,12 @@ package curl
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	_ "errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -13,8 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"log"
-	"context"
 )
 
 /*
@@ -56,9 +56,10 @@ type Request struct {
 	transferTimeout time.Duration
 
 	transport *http.Transport
-	httpreq       *http.Request
+	httpreq   *http.Request
 
-	cancel context.CancelFunc
+	cancel   context.CancelFunc
+	canceled bool
 
 	redirect bool
 }
@@ -283,7 +284,7 @@ func (mon *Monitor) getProgressStatus(lastSnapshot *snapShot) (stat ProgressStat
 	stat.ContentLength = mon.contentLength
 	stat.Size = mon.ioTracker.Bytes
 
-	if lastSnapshot != nil && (int64(now.Sub(lastSnapshot.time)) / int64(time.Millisecond)) > 0 {
+	if lastSnapshot != nil && (int64(now.Sub(lastSnapshot.time))/int64(time.Millisecond)) > 0 {
 		stat.Speed = (stat.Size - lastSnapshot.bytes) * 1000 / (int64(now.Sub(lastSnapshot.time)) / int64(time.Millisecond))
 	}
 
@@ -424,21 +425,22 @@ func (req *Request) ForceClose() error {
 
 	if req.cancel != nil {
 		req.cancel()
+		req.canceled = true
 		fmt.Println("running cancel...")
 	}
 
 	return nil
 
 	//if req.transport != nil {
-		//fmt.Println("hard close", req.url)
-		//req.transport.CancelRequest(req.httpreq)
-		//fmt.Println("finish cancel request")
-		//req.transport.CloseIdleConnections()
-		//fmt.Println("finish close connection")
-		//return nil
+	//fmt.Println("hard close", req.url)
+	//req.transport.CancelRequest(req.httpreq)
+	//fmt.Println("finish cancel request")
+	//req.transport.CloseIdleConnections()
+	//fmt.Println("finish close connection")
+	//return nil
 	//} else {
-		//fmt.Println("transpart not exist, hard close failed")
-		//return fmt.Errorf("transport not exist")
+	//fmt.Println("transpart not exist, hard close failed")
+	//return fmt.Errorf("transport not exist")
 	//}
 }
 
@@ -524,7 +526,7 @@ func (req *Request) Do() (res Response, err error) {
 				return errors.New("no redirect")
 			},
 		}
-	}else {
+	} else {
 		httpclient = http.Client{
 			Transport: req.transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -586,6 +588,10 @@ func (req *Request) Do() (res Response, err error) {
 	req.downloadMonitor.finished = true
 	res.UploadStatus = req.uploadMonitor.getProgressStatus(nil)
 	res.DownloadStatus = req.downloadMonitor.getProgressStatus(nil)
+
+	if req.canceled && err == nil {
+		err = fmt.Errorf("download have been canceled")
+	}
 
 	return
 }
