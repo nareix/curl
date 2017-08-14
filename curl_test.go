@@ -9,7 +9,9 @@ import (
 
 func TestNew(t *testing.T) {
 
-	c := New("http://127.0.0.1:9071/block", true)
+	url:="http://7xrxj8.com0.z0.glb.qiniucdn.com/delvy/c1/2017/08/01_0/C40E7AA9E44A9B5D40AD943E13C7C5A9_20170801_1_1_639.mp4"
+	//url:="http://127.0.0.1:9071/block"
+	c := New(url, true)
 	c.SaveToFile("test.mp4")
 	c.Progress(func(p ProgressStatus) {
 		timeNeed := time.Duration(-1)
@@ -34,14 +36,14 @@ func TestNew(t *testing.T) {
 		)
 	}, time.Second)
 
-	go func() {
-		time.Sleep(time.Second * 10)
-		fmt.Println("强行软关闭")
-		c.ControlDownload().Stop()
-	}()
+	//go func() {
+	//	time.Sleep(time.Second * 10)
+	//	fmt.Println("强行软关闭")
+	//	c.ControlDownload().Stop()
+	//}()
 
 	go func() {
-		time.Sleep(time.Second * 20)
+		time.Sleep(time.Second * 10)
 		fmt.Println("强行硬关闭")
 		err := c.ForceClose()
 		fmt.Println(err)

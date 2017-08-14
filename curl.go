@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 	"log"
+	"context"
 )
 
 /*
@@ -56,6 +57,8 @@ type Request struct {
 
 	transport *http.Transport
 	httpreq       *http.Request
+
+	cancel context.CancelFunc
 
 	redirect bool
 }
@@ -417,18 +420,26 @@ func (req *Request) ForceClose() error {
 	defer func() {
 		fmt.Println("exit force close", req.url)
 	}()
-	req.ControlDownload().Stop()
-	if req.transport != nil {
-		fmt.Println("hard close", req.url)
-		req.transport.CancelRequest(req.httpreq)
-		fmt.Println("finish cancel request")
-		req.transport.CloseIdleConnections()
-		fmt.Println("finish close connection")
-		return nil
-	} else {
-		fmt.Println("transpart not exist, hard close failed")
-		return fmt.Errorf("transport not exist")
+	//req.ControlDownload().Stop()
+
+	if req.cancel != nil {
+		req.cancel()
+		fmt.Println("running cancel...")
 	}
+
+	return nil
+
+	//if req.transport != nil {
+		//fmt.Println("hard close", req.url)
+		//req.transport.CancelRequest(req.httpreq)
+		//fmt.Println("finish cancel request")
+		//req.transport.CloseIdleConnections()
+		//fmt.Println("finish close connection")
+		//return nil
+	//} else {
+		//fmt.Println("transpart not exist, hard close failed")
+		//return fmt.Errorf("transport not exist")
+	//}
 }
 
 func (req *Request) Do() (res Response, err error) {
@@ -474,9 +485,13 @@ func (req *Request) Do() (res Response, err error) {
 
 	defer req.enterStat(Closed)
 
+	var cx context.Context
+	cx, req.cancel = context.WithCancel(context.Background())
+
 	if req.httpreq, err = http.NewRequest(req.method, req.url, reqbody); err != nil {
 		return
 	}
+	req.httpreq = req.httpreq.WithContext(cx)
 	req.httpreq.Header = req.Headers
 	req.httpreq.ContentLength = reqbodyLength
 
