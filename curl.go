@@ -421,7 +421,6 @@ func (req *Request) ForceClose() error {
 	defer func() {
 		fmt.Println("exit force close", req.url)
 	}()
-	//req.ControlDownload().Stop()
 
 	if req.cancel != nil {
 		req.cancel()
@@ -430,22 +429,9 @@ func (req *Request) ForceClose() error {
 	}
 
 	return nil
-
-	//if req.transport != nil {
-	//fmt.Println("hard close", req.url)
-	//req.transport.CancelRequest(req.httpreq)
-	//fmt.Println("finish cancel request")
-	//req.transport.CloseIdleConnections()
-	//fmt.Println("finish close connection")
-	//return nil
-	//} else {
-	//fmt.Println("transpart not exist, hard close failed")
-	//return fmt.Errorf("transport not exist")
-	//}
 }
 
 func (req *Request) Do() (res Response, err error) {
-	//var httpreq *http.Request
 	var httpres *http.Response
 	var reqbody io.Reader
 	var reqbodyLength int64
@@ -551,9 +537,6 @@ func (req *Request) Do() (res Response, err error) {
 
 	if req.downloadToFile != "" {
 		var f *os.File
-		//if f, err = os.Create(req.downloadToFile); err != nil {
-		//	return
-		//}
 		if f, err = os.OpenFile(req.downloadToFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666); err != nil {
 			return
 		}
