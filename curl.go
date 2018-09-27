@@ -2,9 +2,12 @@ package curl
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	_ "errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -51,14 +54,23 @@ type Request struct {
 
 	dialTimeout     time.Duration
 	transferTimeout time.Duration
+
+	transport *http.Transport
+	httpreq   *http.Request
+
+	cancel   context.CancelFunc
+	canceled bool
+
+	redirect bool
 }
 
-func New(url string) *Request {
+func New(url string, redirect bool) *Request {
 	req := &Request{
 		url: url,
 		Headers: http.Header{
 			"User-Agent": {"curl/7.29.0"},
 		},
+		redirect: redirect,
 	}
 
 	req.uploadMonitor = &Monitor{ioTracker: &ioTracker{}}
@@ -68,11 +80,11 @@ func New(url string) *Request {
 }
 
 func Get(url string) *Request {
-	return New(url).Method("GET")
+	return New(url, true).Method("GET")
 }
 
 func Post(url string) *Request {
-	return New(url).Method("POST")
+	return New(url, true).Method("POST")
 }
 
 func (req *Request) Method(method string) *Request {
@@ -272,11 +284,13 @@ func (mon *Monitor) getProgressStatus(lastSnapshot *snapShot) (stat ProgressStat
 	stat.ContentLength = mon.contentLength
 	stat.Size = mon.ioTracker.Bytes
 
-	if lastSnapshot != nil {
+	if lastSnapshot != nil && (int64(now.Sub(lastSnapshot.time))/int64(time.Millisecond)) > 0 {
 		stat.Speed = (stat.Size - lastSnapshot.bytes) * 1000 / (int64(now.Sub(lastSnapshot.time)) / int64(time.Millisecond))
 	}
 
-	stat.AverageSpeed = stat.Size * 1000 / (int64(now.Sub(mon.timeStarted)) / int64(time.Millisecond))
+	if (int64(now.Sub(mon.timeStarted)) / int64(time.Millisecond)) > 0 {
+		stat.AverageSpeed = stat.Size * 1000 / (int64(now.Sub(mon.timeStarted)) / int64(time.Millisecond))
+	}
 
 	if stat.ContentLength > 0 {
 		stat.Percent = float32(stat.Size) / float32(stat.ContentLength)
@@ -403,8 +417,21 @@ func (req *Request) ControlDownload() (ctrl *Control) {
 	return
 }
 
+func (req *Request) ForceClose() error {
+	defer func() {
+		fmt.Println("exit force close", req.url)
+	}()
+
+	if req.cancel != nil {
+		req.cancel()
+		req.canceled = true
+		fmt.Println("running cancel...")
+	}
+
+	return nil
+}
+
 func (req *Request) Do() (res Response, err error) {
-	var httpreq *http.Request
 	var httpres *http.Response
 	var reqbody io.Reader
 	var reqbodyLength int64
@@ -446,13 +473,17 @@ func (req *Request) Do() (res Response, err error) {
 
 	defer req.enterStat(Closed)
 
-	if httpreq, err = http.NewRequest(req.method, req.url, reqbody); err != nil {
+	var cx context.Context
+	cx, req.cancel = context.WithCancel(context.Background())
+
+	if req.httpreq, err = http.NewRequest(req.method, req.url, reqbody); err != nil {
 		return
 	}
-	httpreq.Header = req.Headers
-	httpreq.ContentLength = reqbodyLength
+	req.httpreq = req.httpreq.WithContext(cx)
+	req.httpreq.Header = req.Headers
+	req.httpreq.ContentLength = reqbodyLength
 
-	httptrans := &http.Transport{
+	req.transport = &http.Transport{
 		Dial: func(network, addr string) (conn net.Conn, err error) {
 			if req.dialTimeout != time.Duration(0) {
 				conn, err = net.DialTimeout(network, addr, req.dialTimeout)
@@ -471,10 +502,32 @@ func (req *Request) Do() (res Response, err error) {
 	}
 
 	httpclient := http.Client{
-		Transport: httptrans,
+		Transport: req.transport,
 	}
 
-	if httpres, err = httpclient.Do(httpreq); err != nil {
+	if !req.redirect {
+		httpclient = http.Client{
+			Transport: req.transport,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return errors.New("no redirect")
+			},
+		}
+	} else {
+		httpclient = http.Client{
+			Transport: req.transport,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				log.Println("Location:", req.URL, "[following]")
+				return nil
+			},
+		}
+	}
+
+	if httpres, err = httpclient.Do(req.httpreq); err != nil {
+		if strings.Contains(err.Error(), "no redirect") {
+			res.StatusCode = httpres.StatusCode
+			res.Headers = httpres.Header
+			res.HttpResponse = httpres
+		}
 		return
 	}
 	defer httpres.Body.Close()
@@ -484,9 +537,12 @@ func (req *Request) Do() (res Response, err error) {
 
 	if req.downloadToFile != "" {
 		var f *os.File
-		if f, err = os.Create(req.downloadToFile); err != nil {
+		if f, err = os.OpenFile(req.downloadToFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666); err != nil {
 			return
 		}
+		defer func() {
+			f.Close()
+		}()
 		resbody = f
 	} else {
 		resbodyBuffer = &bytes.Buffer{}
@@ -516,7 +572,15 @@ func (req *Request) Do() (res Response, err error) {
 	res.UploadStatus = req.uploadMonitor.getProgressStatus(nil)
 	res.DownloadStatus = req.downloadMonitor.getProgressStatus(nil)
 
+	if req.canceled && err == nil {
+		err = fmt.Errorf("download have been canceled")
+	}
+
 	return
+}
+
+func (req *Request) GetFilepath() string {
+	return req.downloadToFile
 }
 
 type Response struct {
